@@ -1,0 +1,30 @@
+# dsh-agent-browser bundle patch:
+# mounts the Host half of the plugin into the current DSH profile.
+# The Client half is loaded automatically from package.json -> dsh.client.
+- insert:
+    - id: dsh-agent-browser
+      name: '@local/dsh-agent-browser'
+      config:
+        # URL opening policy:
+        #   confirm (default, recommended) = URLs outside the allowlist require an explicit
+        #                                     "Allow" click in the browser panel before loading.
+        #   free                           = any http/https URL opens immediately; the allowlist
+        #                                     and the confirmation UI are disabled.
+        openPolicy: confirm
+
+        # Optional: hosts (suffix match, subdomains included) where the "portal click bridge"
+        # is injected. Use this for intranet/portal sites that open a blank window and then
+        # write a form into it; the plugin then offers a visible "continue" button instead of
+        # auto-submitting anything.
+        # portalBridgeHosts:
+        #   - example.com
+
+        # Optional: preload allowlist entries (only used when openPolicy: confirm).
+        # Domain rules cover their subdomains; rules starting with https:// match a URL prefix.
+        # allowlist:
+        #   - example.com
+        #   - https://intranet.example.com/app
+
+        # Optional: directory for browser_screenshot output.
+        # Default: $DSH_HOME/agent-browser/shots (usually ~/.dsh/agent-browser/shots).
+        # shotDir: C:\Users\you\Pictures\dsh-shots

@@ -1,0 +1,51 @@
+{
+  "name": "@local/dsh-agent-browser",
+  "version": "1.1.1",
+  "private": true,
+  "type": "module",
+  "description": "Controlled browser panel for the DSH desktop app: the agent can read pages, fill inputs, take screenshots, and explicitly click controls (click:true; no Enter, no form.submit()). Password/file fields are never filled, and reading exposes only their value length.",
+  "license": "MIT",
+  "author": "Pazburg",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Pazburg/dsh-agent-browser.git"
+  },
+  "homepage": "https://github.com/Pazburg/dsh-agent-browser#readme",
+  "bugs": {
+    "url": "https://github.com/Pazburg/dsh-agent-browser/issues"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "browser",
+    "browser-automation",
+    "electron",
+    "webview",
+    "agent",
+    "plugin"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node selftest.mjs && node client-selftest.mjs && node guest-dom-selftest.mjs"
+  },
+  "devDependencies": {
+    "@mixmark-io/domino": "^2.2.0"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": []
+    }
+  }
+}

@@ -1,0 +1,14 @@
+# dependencies (test-only; the plugin has zero runtime dependencies)
+node_modules/
+
+# local logs / backups
+*.log
+*.bak
+*.bak-*
+agent-browser-backups/
+.dsh/
+
+# OS noise
+.DS_Store
+Thumbs.db
+desktop.ini
