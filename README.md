@@ -1,224 +1,221 @@
 # dsh-agent-browser
 
+**Give your DSH agent a browser, right beside the conversation.**
+
 [![CI](https://github.com/Pazburg/dsh-agent-browser/actions/workflows/ci.yml/badge.svg)](https://github.com/Pazburg/dsh-agent-browser/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A **controlled, agent-facing browser panel** for the [DSH (DeepSeek Harness)](https://github.com/deepseek-ai) desktop app. It gives an LLM agent six small tools to open pages, read them, fill inputs, take screenshots and — only when explicitly requested — click controls. The browser lives inside DSH's right sidebar; it never touches your normal browser, never presses <kbd>Enter</kbd> and never calls `form.submit()`.
+`dsh-agent-browser` adds a browser panel to the DSH (DeepSeek Harness) desktop app. Your agent can read pages, fill forms, work with code editors, take screenshots, and click controls through six browser tools. You can watch the page and interact with it in the same sidebar.
 
-> **Status: experimental.** Built and tested against DSH desktop `0.2.1-rc.2` (Electron 44 / Node 24) on Windows. The plugin talks to DSH-internal APIs that may change between DSH releases; pin a DSH version you have tested.
+The panel uses a Chromium webview inside DSH, separate from your everyday browser and its profile. Filling and clicking are separate operations: a click requires an explicit `click: true` tool argument.
 
----
+> **Experimental.** Developed against DSH Desktop `0.2.1-rc.2` on Windows. The plugin depends on internal DSH APIs, so compatibility with other releases needs verification. The panel UI and tool descriptions are currently in Chinese.
 
-## Highlights
+[Chinese README](README.zh-CN.md) · [Architecture](docs/ARCHITECTURE.md) · [Security](SECURITY.md) · [Changelog](CHANGELOG.md)
 
-- **Works inside DSH.** A real Chromium `<webview>` in a right-sidebar tab (`kind = agent-browser`), driven through DSH's own lease API — no separate browser window, no external browser profile.
-- **Read / fill / screenshot.** Page text, editable elements (input, textarea, select, contenteditable, CodeMirror, Monaco, Ace), forms with radio/checkbox metadata, buttons and links.
-- **Explicit click only.** `browser_fill({ click: true, ... })` is the *only* way to click. Without it, radio/checkbox/button/link targets are rejected. No Enter key, no `form.submit()`, no implicit submit.
-- **Credentials stay out of the loop.** `password` and `file` fields are never filled, and `browser_read` never returns their plaintext — flat `editables` entries expose only `valueLength`, while form text controls also set `redacted: true`. Same for same-origin iframes.
-- **Same-origin iframes supported.** The global `index` numbering is consistent across nested documents; `framePath` scopes selectors and validates indices.
-- **Safer default policy.** Ships with `openPolicy: confirm`: URLs outside the allowlist require you to click **Allow** in the panel. A `free` mode is available for trusted/local-only workflows.
-- **Honest state reporting.** Disabled/detached controls, cancelled clicks and failed receipts are reported as errors — never as fake success.
-- **Zero runtime dependencies.** Two plain ESM files plus a manifest; tests use a DOM implementation only as a dev dependency.
+## What you can do
 
-## How it works
+- **Read pages with structure.** Get the URL, title, visible text, editable fields, forms, buttons, and links, including content in same-origin iframes.
+- **Fill forms and editors.** Work with text inputs, textareas, dropdowns, contenteditable elements, and supported CodeMirror, Monaco, and Ace editors.
+- **Click when requested.** Select radio buttons, toggle checkboxes, follow links, or press buttons with `click: true`.
+- **Check the result visually.** Save a PNG screenshot of the current page.
+- **Browse alongside the agent.** Use back/forward, reload/stop, page zoom, find-in-page, and recent URLs in the panel.
 
+For example, ask your agent:
+
+> Read the current page and summarize the form fields.
+
+> Fill the message field with this draft, then take a screenshot for review.
+
+> Select the requested option, click Continue, and read the next page.
+
+## Quick start
+
+### Install on Windows
+
+Start DSH Desktop at least once so its desktop profile exists, then **fully quit DSH**, including its tray process.
+
+Clone this repository or download and extract its ZIP. From the repository folder, double-click `install.cmd`, or run:
+
+```powershell
+git clone https://github.com/Pazburg/dsh-agent-browser.git
+cd dsh-agent-browser
+.\install.cmd
 ```
-┌─ DSH window ──────────────────────────────────────────────────────┐
-│                                           │ right sidebar          │
-│                                           │ ┌────────────────────┐ │
-│   normal DSH chat                         │ │ ← ↻ [url......] ↵  │ │
-│                                           │ │ title · host/path  │ │
-│                                           │ │ ┌────────────────┐ │ │
-│                                           │ │ │    webview     │ │ │
-│                                           │ │ └────────────────┘ │ │
-│                                           │ │ allowlist (collapsible) │
-│                                           │ └────────────────────┘ │
-└───────────────────────────────────────────────────────────────────┘
-        ▲                                        │
-        │ tool calls (open/read/fill/screenshot) │ polls every 500 ms
-        │                                        ▼
-   Host plugin (dsh-desktop-host subprocess)  ──HTTP── /dsh-agent-browser/*
-```
 
-DSH separates the two halves: the **Host** half (`index.js`) runs in the `dsh-desktop-host` subprocess and cannot touch the page; the **Client** half (`client.js`) runs in the DSH renderer and owns the `<webview>`. They communicate through a token-protected HTTP command queue polled every 500 ms. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the protocol.
+The installer copies the plugin into:
 
-**Interface language:** the panel UI and the model-facing tool descriptions are currently Chinese; this README and the docs are English, with a Chinese companion at [README.zh-CN.md](README.zh-CN.md).
-
-## Requirements
-
-- DSH desktop app **0.2.x** (developed against `0.2.1-rc.2`) — only the desktop window exposes `dshDesktop.browser`; opening DSH in a normal browser cannot create the controlled webview.
-- Windows for the provided `install.cmd` / `install.ps1` helpers. Manual installation works on any platform DSH supports; the Node self-tests are portable.
-- Node.js **20+** for development and tests; CI runs 22/24 (the plugin itself runs inside DSH's Node).
-
-## Install
-
-### One-click (Windows, from the repo root)
-
-1. Fully quit the DSH desktop app (tray → **Quit**; closing the window may only hide it).
-2. Double-click **`install.cmd`**.
-3. Start DSH again, open the right sidebar and pick the **AI Browser** tab (or simply let the agent use the browser once — it opens the tab itself).
-
-The installer copies the runtime files to:
-
-```
+```text
 %USERPROFILE%\.dsh\profiles\desktop\node_modules\@local\dsh-agent-browser\
 ```
 
-backs up an existing plugin folder to `…\profiles\desktop\agent-browser-backups\install-<timestamp>\`, preserves an existing `cordis.patch.yml` (your configuration), registers `@local/dsh-agent-browser` in `…\profiles\desktop\package.json` → `dsh.profile.bundles`, and rolls the manifest back if validation fails.
+It registers the bundle in the desktop profile, backs up an existing installation, and preserves an existing `cordis.patch.yml` configuration. Installation requires no build step or runtime dependency installation.
 
-### Manual install
+For a custom profile:
 
-1. Quit DSH.
-2. Copy `index.js`, `client.js`, `package.json`, `cordis.patch.yml` (and optionally `README.md`, `CHANGELOG.md`) into
-   `%USERPROFILE%\.dsh\profiles\desktop\node_modules\@local\dsh-agent-browser\`.
-3. Add `"@local/dsh-agent-browser"` to the `dsh.profile.bundles` array of
-   `%USERPROFILE%\.dsh\profiles\desktop\package.json`.
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -ProfileDir C:\path\to\desktop-profile
+```
+
+### Open your first page
+
+1. Restart DSH and open **AI Browser** in the right sidebar. In the current UI, the tab is labeled **AI 浏览器**; it is also available from the sidebar's **+** menu.
+2. Enter a URL in the panel. If the site requires a login, sign in yourself.
+3. Ask the agent to read the current page or fill a field.
+4. When an agent navigation needs approval, choose **Allow** in the panel to continue.
+
+The default `confirm` policy asks before opening URLs outside the allowlist. URLs you enter directly in the panel do not require that approval.
+
+**Login sessions last only for the current DSH run.** Recent URLs are remembered, but the browser's in-memory cookies and logins are discarded when DSH exits.
+
+### Manual installation
+
+With DSH fully closed:
+
+1. Create the plugin directory shown above.
+2. Copy `index.js`, `client.js`, `package.json`, and `cordis.patch.yml` into it.
+3. Add `"@local/dsh-agent-browser"` to the `dsh.profile.bundles` array in `%USERPROFILE%\.dsh\profiles\desktop\package.json`.
 4. Restart DSH.
 
-> The `@local/` package scope is a DSH convention for locally installed plugin bundles. Keep it unless you also change the bundle registration and client module id consistently.
->
-> The installer accepts `-ProfileDir <path>` for a non-default profile (for example an isolated test profile). This is a DSH plugin, not an npm package; `private: true` in `package.json` is intentional.
+Keep the `@local/dsh-agent-browser` package name consistent with the bundle registration. This is a local DSH plugin; the package is intentionally marked `private`.
 
-### Uninstall
+### Update or uninstall
 
-Fully quit DSH, then run `uninstall.cmd` (removes the bundle entry and the plugin folder). Or, to just disable it, remove `@local/dsh-agent-browser` from `dsh.profile.bundles` and restart DSH.
+To update, fully quit DSH, run `install.cmd` from the updated repository, and restart DSH. Your installed configuration is preserved; review [CHANGELOG.md](CHANGELOG.md) for configuration changes.
 
-## First run
+To uninstall, fully quit DSH and run `uninstall.cmd`. To disable the plugin, remove its entry from `dsh.profile.bundles` and restart DSH.
 
-1. Restart DSH. The **AI Browser** tab appears in the right sidebar (you can also open it via the sidebar's **+** picker).
-2. In the panel, type the page URL you want the agent to work on and open it once (user-initiated navigation does not need the allowlist).
-3. Sign in to the site **yourself** in the panel if it needs a login. The internal browser partition is in-memory: it survives for the current DSH run and is discarded when DSH exits (DSH behaviour, not a plugin setting).
-4. Ask the agent to read/fill. In `confirm` mode, URLs outside the allowlist show an **Allow / Not now** prompt before loading.
+## Browser tools
+
+Tools are registered with the DSH agent and return JSON results. Start with `browser_panel` to check the panel connection.
+
+| Tool | What it does | Parameters |
+| --- | --- | --- |
+| `browser_panel` | Reports connection status, the current page, the allowlist, and pending commands. | None |
+| `browser_open` | Opens an HTTP or HTTPS URL, applying the navigation policy. | `url` |
+| `browser_read` | Returns page text and structured lists of fields, forms, buttons, and links. | None |
+| `browser_fill` | Fills a field, selects a dropdown option, or explicitly clicks a supported control. | `selector` or `index`; `text`, `click`, `framePath`, `replace` |
+| `browser_screenshot` | Saves a PNG of the current page and returns its file path. | None |
+| `browser_allowlist` | Lists, adds, or removes navigation rules in `confirm` mode; reports status in `free` mode. | `action`, `pattern` |
+
+### Fill and click examples
+
+These illustrate agent tool calls. Use selectors and indices returned by `browser_read` for the actual page.
+
+```javascript
+// Inspect the page before choosing a target.
+browser_read({})
+
+// Fill a text field. Existing input/textarea content is replaced by default.
+browser_fill({ selector: '#message', text: 'Hello from DSH.' })
+
+// Target an editable field by its zero-based index instead.
+browser_fill({ index: 0, text: 'Hello from DSH.' })
+
+// Select a dropdown option by its value or displayed text.
+browser_fill({ selector: '#language', text: 'English' })
+
+// Request a click explicitly.
+browser_fill({ selector: '#continue', click: true })
+
+// Set a checkbox state; leave it alone if already checked.
+browser_fill({ selector: '#remember-choice', click: true, text: 'true' })
+
+// Capture the page for review.
+browser_screenshot({})
+```
+
+Use a unique CSS `selector` or an editable element's zero-based `index`. Buttons and links are addressed by selector. Indices form one global list across the page and its same-origin iframes; pass the returned `framePath` to scope a selector to an iframe or validate an index's frame.
+
+`replace` defaults to `true` for inputs and textareas. Rich editors and contenteditable elements replace their content regardless of this option. Password/file fields, disabled or detached controls, and ambiguous selectors are rejected. Read the page again after navigation or a page update before reusing a target.
+
+The plugin does not press Enter or call `form.submit()` / `requestSubmit()`. An explicit click on a submit button can still submit a form or navigate. Filling inputs and dropdowns dispatches input/change events, so the site's own autosave or validation may run.
 
 ## Configuration
 
-Configuration lives in the bundle patch `cordis.patch.yml` of the installed plugin. Edit that file and restart DSH. If `openPolicy` is omitted entirely, the plugin falls back to `confirm` (safe default).
+Edit `cordis.patch.yml` in the **installed plugin directory**, then restart DSH. Reinstalling preserves that file.
 
 ```yaml
 - insert:
     - id: dsh-agent-browser
       name: '@local/dsh-agent-browser'
       config:
-        # confirm (default) = ask before loading non-allowlisted URLs
-        # free             = open any http/https URL directly (allowlist UI disabled)
         openPolicy: confirm
 
-        # Optional: hosts (suffix match, subdomains included) where the
-        # "portal click bridge" is injected. Useful for intranet portals that
-        # window.open('') and then write a form into the blank window.
-        # portalBridgeHosts:
-        #   - example.com
-
-        # Optional: preload allowlist entries (confirm mode only).
+        # Optional rules for URLs that can open without a prompt.
         # allowlist:
         #   - example.com
-        #   - https://intranet.example.com/app
+        #   - https://app.example.com/workspace/
 
-        # Optional: screenshot output directory.
-        # shotDir: C:\Users\you\Pictures\dsh-shots
+        # Optional screenshot directory.
+        # shotDir: C:\path\to\screenshots
+
+        # Optional support for portals that open a blank window
+        # and write a form into it.
+        # portalBridgeHosts:
+        #   - portal.example.com
 ```
 
-The plugin stores runtime data in `$DSH_HOME/agent-browser/` (normally `~/.dsh/agent-browser/`):
+| Setting | Behavior |
+| --- | --- |
+| `openPolicy: confirm` | Default, including when omitted. URLs outside the allowlist require approval in the panel. |
+| `openPolicy: free` | Opens any HTTP/HTTPS URL without a confirmation prompt; disables allowlist controls. |
+| `allowlist` | Preloads domain or URL-prefix rules in `confirm` mode. |
+| `shotDir` | Overrides the default screenshot output directory. |
+| `portalBridgeHosts` | Enables the portal bridge for matching hosts and their subdomains. Blank-window form flows become a visible Continue button that must be clicked. |
 
-- `allowlist.json` — allowlist entries added from the panel,
-- `shots/` — default screenshot directory.
+### Allowlist rules and saved data
 
-### Allowlist rules
+- A **domain rule**, such as `example.com`, matches that host and its subdomains. It does not match `notexample.com`.
+- A **URL-prefix rule**, such as `https://app.example.com/workspace/`, matches that prefix within the same origin. A different scheme, host, or port does not match. Prefix matching is literal; include a trailing `/` when you want a directory prefix.
 
-- Domain rule: `example.com` — matches the host itself and all subdomains (`app.example.com`, `deep.sub.example.com`).
-- URL prefix rule: `https://app.example.com/path` — matches URLs starting with that prefix.
-- Domain rules reject suffix tricking (`notexample.com` will not match `example.com`). URL-prefix rules are **origin-scoped**: a rule for `https://example.com` will not match `https://example.com.evil.com` or another port. Invalid entries are refused.
+Panel-managed allowlist entries are saved to `$DSH_HOME/agent-browser/allowlist.json`. Screenshots default to `$DSH_HOME/agent-browser/shots/`. Without `DSH_HOME`, these paths use `~/.dsh/agent-browser/`.
 
-## Tools
+## Compatibility and limitations
 
-All tools are registered on the DSH Host and return JSON (rendered as text for the model).
+| Area | Current behavior |
+| --- | --- |
+| Host application | Requires DSH Desktop and its `dshDesktop.browser` API. DSH opened in a regular browser cannot provide the panel's webview. |
+| Interface language | Panel labels and agent tool descriptions are currently Chinese. |
+| Login persistence | Cookies and logins are lost when DSH exits. |
+| Screenshots | Keep the DSH window visible and the AI Browser tab in the foreground. Minimized or obscured windows can prevent capture. |
+| Iframes | Reading and filling support same-origin frames only. Panel keyboard shortcuts are bridged in the top document. |
+| Clicks | Synthetic clicks may be rejected by sites that require trusted user activation. |
+| Retries | Click deduplication is held in memory for the controller session. Check page state before repeating a submit-like action. |
+| DSH restrictions | The documented host environment blocks downloads, denies camera/microphone/location/notification requests, cancels JavaScript dialogs, and does not support HTTP Basic authentication. |
 
-| Tool | Purpose | Key parameters |
-|---|---|---|
-| `browser_panel` | Panel connectivity/status, current page, allowlist, pending commands. Call it before browser work. | — |
-| `browser_open` | Open an http/https URL in the panel. In `confirm` mode a non-allowlisted URL asks the user first. | `url` |
-| `browser_read` | Read the current page: URL, title, visible text (truncated), editable elements, `forms` (radio/checkbox groups), `buttons`, `links`, `framePath` for same-origin iframes. Password/file values are redacted. | — |
-| `browser_fill` | Fill text into inputs/editors, or click a control when `click: true`. Default: fill only, no Enter, no click, no submit. | `text`, `click`, `selector`, `index`, `framePath`, `replace` |
-| `browser_screenshot` | Capture the panel page as PNG and return its path. Requires the DSH window and the AI Browser tab to be visible. | — |
-| `browser_allowlist` | In `confirm` mode: list/add/remove allowlist rules. In `free` mode it is read-only status. | `action`, `pattern` |
-
-### `browser_fill` details
-
-- **Fill:** `browser_fill({ selector: '#code', text: '...' })` or `browser_fill({ index: 3, text: '...' })`.
-- **Click:** `browser_fill({ selector: '#submitBtn', click: true })`. For radios you may pass `text: 'B'` to validate the option value; for checkboxes, omit `text` to toggle once or pass the strings `'true'`/`'false'` to set a target state.
-- **Indexing:** `index` is the global flat number returned by `browser_read`, consistent across same-origin iframes. `framePath` scopes a `selector` to a iframe and validates an `index`.
-- **`replace`:** clears `input`/`textarea` before filling; it is ignored for `contenteditable` and rich editors (CodeMirror/Monaco/Ace).
-- **Rejected:** password/file fields, disabled or detached controls, non-unique selectors, clicks requested without `click: true`.
-- **Synthetic events:** clicks are synthetic (`isTrusted = false`). Sites that require real user activation may ignore them; this is a browser boundary, not something a plugin can fake.
+If tools are unavailable or the panel is disconnected, fully restart DSH, open the sidebar tab, and check `browser_panel`. Registration failures are reported there. For screenshot failures, restore the window and bring the tab to the foreground before retrying.
 
 ## Security model
 
-At a glance (details in [SECURITY.md](SECURITY.md)):
+The plugin redacts password and file input values from structured reads and refuses to fill those fields. Their value lengths may still be returned. This is field-level filtering: page text and ordinary fields remain readable by the agent.
 
-- Credentials: password/file never filled, never returned in plaintext.
-- No implicit actions: no Enter key, no `form.submit()`/`requestSubmit()`, no click without `click: true`.
-- URL gating: `confirm` mode by default; allowlist rules are explicit.
-- Local channel: the Host↔Client route requires a random token claimed by the panel (403 otherwise); the route goes through DSH's web server with its Host/Origin checks. This protects against accidental or cross-origin delivery, **not** against a hostile local process that can already reach DSH's loopback server (claim/reclaim are first-come by design); treat your local account as trusted.
-- Isolation: the webview is created through DSH's browser lease. DSH (tested with 0.2.1-rc.2) applies `nodeIntegration: false`, `contextIsolation: true` and `sandbox: true`; the plugin never creates a BrowserWindow and never touches external browsers. These web preferences are DSH-owned, not set by this repository.
-- **Prompt injection is still possible.** A malicious page can try to talk the agent into clicking or navigating. Use `confirm` mode on untrusted pages and keep an eye on the panel while the agent works.
+The default navigation policy requires approval for URLs outside the allowlist. **`click: true` is an explicit tool argument, not a separate human approval prompt for each click.** Page content can still influence an agent through prompt injection, and accepted clicks can have real effects on the site.
 
-## Known limitations
-
-1. **DSH desktop only.** No `dshDesktop.browser` in a normal browser tab, so the controlled webview cannot be created there.
-2. **Login state does not survive a DSH restart.** The internal browser uses an in-memory partition. URLs you visited are remembered by the plugin (recent list / last page), but cookies and logins are not. Log in again after restarting.
-3. **Screenshots need a visible window.** `webview.capturePage()` fails when the DSH window is minimized/occluded or the AI Browser tab is not in the foreground; the tool retries once and returns an actionable message.
-4. **Same-origin iframes only.** Cross-origin iframes cannot be read/filled — a webview security boundary. The keyboard bridge is injected into the top document only, so panel shortcuts do not work while focus is inside any iframe (same-origin included).
-5. **Synthetic clicks** may be ignored by sites that check `isTrusted` or require real user activation.
-6. **DSH host limitations** apply: downloads are blocked, camera/location/notifications/microphone requests are denied, `alert`/`confirm`/`prompt` are cancelled, HTTP Basic auth fails, drag-and-drop navigation is disabled, and developer tools are unavailable in packaged builds.
-7. **Submit consequences are real.** A `click: true` on a submit button/link can cause a native navigation or POST. That is the explicit action the caller asked for; verify the page afterwards.
-8. **In-memory dedupe.** Click deduplication for receipt retries is per controller session; a full page reload or DSH restart loses it. Check page state after submit-like actions.
+DSH creates and isolates the browser webview. The plugin's host and panel communicate through a token-protected local HTTP queue; the local account and DSH runtime are trusted. See [SECURITY.md](SECURITY.md) for the full boundaries and vulnerability reporting process.
 
 ## Development
 
+The runtime consists of plain ESM JavaScript with no runtime dependencies or build step. Development requires Node.js 20+; CI runs on Windows with Node.js 22 and 24.
+
 ```powershell
-npm install        # dev dependency: @mixmark-io/domino (only for the guest-DOM test)
-npm test           # host + client + guest-DOM self-tests
+npm install
+npm test
 ```
 
-Individual suites:
+`npm install` adds the development dependency `@mixmark-io/domino`. The test command runs host, client, and guest-DOM self-tests; the guest-DOM suite skips if that dependency is missing. Self-tests do not replace validation in a real DSH desktop window.
 
-- `node selftest.mjs` — Host half (real HTTP route, token, policies, tools, parameter validation, screenshot PNG, `/allowed`).
-- `node client-selftest.mjs` — Client half (controller with fake DOM/bridge/fetch; consent gate, token 409 recovery, popup/navigation takeover, dedupe, iframe scripts, zoom/find/back/forward).
-- `node guest-dom-selftest.mjs` — executes the real `READ_SRC`/`fillSrc` scripts in a DOM; `SKIP`s cleanly if domino is not installed.
+| File | Role |
+| --- | --- |
+| `index.js` | Host plugin: tools, command queue, navigation policy, and screenshot storage. |
+| `client.js` | Sidebar panel: webview, page inspection, field interaction, and command execution. |
+| `cordis.patch.yml` | Bundle registration and configuration. |
+| `selftest.mjs` | Host and HTTP route tests. |
+| `client-selftest.mjs` | Panel controller and browser bridge tests. |
+| `guest-dom-selftest.mjs` | Tests for injected page-reading and interaction scripts. |
 
-CI runs all three suites on Node 22/24 (Windows). See [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution flow.
-
-## Project layout
-
-```
-dsh-agent-browser/
-├── index.js                 # Host half: tools, HTTP route, command queue, allowlist
-├── client.js                # Client half: sidebar tab, webview, command execution
-├── cordis.patch.yml         # DSH bundle patch + configuration
-├── package.json             # DSH plugin manifest (exports, dsh.client, dsh.bundle)
-├── selftest.mjs             # Host self-test
-├── client-selftest.mjs      # Client self-test
-├── guest-dom-selftest.mjs   # DOM-level self-test for the injected scripts
-├── .github/workflows/ci.yml # CI (Node 22/24, Windows)
-├── install.ps1 / install.cmd
-├── uninstall.ps1 / uninstall.cmd
-├── docs/
-│   ├── ARCHITECTURE.md      # components, protocol, security boundaries
-│   ├── AUDIT-SUMMARY.md     # what the 1.1.x security review found/fixed
-│   └── PUBLISHING.md        # GitHub publishing checklist
-├── CHANGELOG.md
-├── SECURITY.md
-└── CONTRIBUTING.md
-```
-
-## Version history and audit
-
-`1.1.1` is the first public release. It includes fixes from an internal audit of `1.1.0` (password side channel, implicit portal submission, forced checked state, confirm-policy bypass, duplicate click on receipt retry, iframe scoping and test-honesty issues). See [CHANGELOG.md](CHANGELOG.md) and [docs/AUDIT-SUMMARY.md](docs/AUDIT-SUMMARY.md).
+The host queues commands, the panel polls and executes them in the webview, and results return to the agent. See [Architecture](docs/ARCHITECTURE.md) for the protocol, [Contributing](CONTRIBUTING.md) for development guidance, and the [audit summary](docs/AUDIT-SUMMARY.md) for the internal review behind the initial public release.
 
 ## License
 
-[MIT](LICENSE).
-
-## Disclaimer
-
-This project is not affiliated with or endorsed by DeepSeek, the DSH project or any website you use it with. Browser automation can interact with third-party sites and may violate their terms of service; use it only on sites and accounts where you have permission. The software is provided "as is" without warranty.
+[MIT](LICENSE). An independent project, unaffiliated with DeepSeek or the DSH project.
